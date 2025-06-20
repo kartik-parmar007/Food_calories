@@ -230,36 +230,37 @@ export default function CalorieFinder() {
       opacity: 0.8,
     },
     buttonContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      marginBottom: 20,
+      flexDirection: 'column',
+      gap: 20,
     },
     button: {
-      backgroundColor: '#007AFF',
-      padding: 15,
-      borderRadius: 8,
-      flexDirection: 'row',
+      padding: 20,
+      borderRadius: 12,
       alignItems: 'center',
-      justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
     },
     cameraButton: {
       backgroundColor: '#007AFF',
     },
     galleryButton: {
-      backgroundColor: '#007AFF',
-    },
-    galleryButtonHighlight: {
-      backgroundColor: '#0056b3',
+      backgroundColor: '#34C759',
     },
     buttonText: {
-      color: '#fff',
-      fontSize: 16,
-      marginLeft: 8,
+      color: 'white',
+      fontSize: 18,
+      fontWeight: '600',
     },
     permissionText: {
-      color: 'red',
-      marginTop: 8,
       textAlign: 'center',
+      color: '#FF3B30',
+      marginTop: 10,
     },
     imageContainer: {
       alignItems: 'center',
@@ -379,22 +380,24 @@ export default function CalorieFinder() {
   );
 
   const renderImageSearch = () => (
-    <ThemedView style={styles.buttonContainer}>
+    <ThemedView style={[styles.buttonContainer, { flexDirection: 'column', gap: 20 }]}>
       <TouchableOpacity
         style={[styles.button, styles.cameraButton]}
         onPress={takePhoto}
         disabled={cameraPermission === false}
+        accessibilityLabel="Take a photo of your food"
       >
-        <Ionicons name="camera" size={20} color="#fff" style={{ marginRight: 8 }} />
+        <Ionicons name="camera" size={24} color="#fff" style={{ marginRight: 10 }} />
         <ThemedText style={styles.buttonText}>Take Photo</ThemedText>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.button, styles.galleryButton, styles.galleryButtonHighlight]}
+        style={[styles.button, styles.galleryButton]}
         onPress={pickImage}
+        accessibilityLabel="Upload an image from your gallery"
       >
-        <Ionicons name="image" size={20} color="#fff" style={{ marginRight: 8 }} />
-        <ThemedText style={styles.buttonText}>Upload Image From Gallery</ThemedText>
+        <Ionicons name="image" size={24} color="#fff" style={{ marginRight: 10 }} />
+        <ThemedText style={styles.buttonText}>Upload From Gallery</ThemedText>
       </TouchableOpacity>
 
       {cameraPermission === false && (
@@ -515,6 +518,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   buttonContainer: {
+    flexDirection: 'column',
     gap: 20,
   },
   button: {
@@ -704,11 +708,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-  },
-  galleryButtonHighlight: {
-    borderWidth: 2,
-    borderColor: '#34C759',
-    backgroundColor: '#34C759',
   },
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,

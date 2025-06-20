@@ -1,6 +1,7 @@
 import { StyleSheet, Text, type TextProps } from 'react-native';
 
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { Fonts, FontSizes, FontWeights } from '@/constants/Theme';
 
 export type ThemedTextProps = TextProps & {
   lightColor?: string;
@@ -35,26 +36,36 @@ export function ThemedText({
 
 const styles = StyleSheet.create({
   default: {
-    fontSize: 16,
+    fontSize: FontSizes.md,
     lineHeight: 24,
+    fontFamily: Fonts.regular,
+    fontWeight: FontWeights.regular,
   },
   defaultSemiBold: {
-    fontSize: 16,
+    fontSize: FontSizes.md,
     lineHeight: 24,
-    fontWeight: '600',
+    fontFamily: Fonts.medium,
+    fontWeight: FontWeights.medium,
   },
   title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    lineHeight: 32,
+    fontSize: FontSizes.xl,
+    fontWeight: FontWeights.bold,
+    fontFamily: Fonts.bold,
+    lineHeight: 36,
+    letterSpacing: 0.5,
   },
   subtitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.bold,
+    fontFamily: Fonts.bold,
+    lineHeight: 28,
   },
   link: {
     lineHeight: 30,
-    fontSize: 16,
-    color: '#0a7ea4',
+    fontSize: FontSizes.md,
+    color: '#0A84FF',
+    fontWeight: FontWeights.medium,
+    fontFamily: Fonts.medium,
+    textDecorationLine: 'underline',
   },
 });
