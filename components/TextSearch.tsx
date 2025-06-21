@@ -1,12 +1,12 @@
+import { CalorieResult, geminiService } from '@/services/geminiService';
 import React, { useState } from 'react';
 import {
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  TextInput,
+    ActivityIndicator,
+    Alert,
+    StyleSheet,
+    TextInput,
+    TouchableOpacity
 } from 'react-native';
-import { geminiService, CalorieResult } from '@/services/geminiService';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 
@@ -26,10 +26,19 @@ export default function TextSearch({ onResult }: TextSearchProps) {
 
     setLoading(true);
     try {
+      console.log('🔍 Starting search for:', foodName.trim());
       const result = await geminiService.getNutritionalInfo(foodName.trim());
+      console.log('✅ Search successful:', result);
       onResult(result);
     } catch (error) {
-      Alert.alert('Error', 'Failed to get nutritional information. Please try again.');
+      console.error('❌ Search failed:', error);
+      let errorMessage = 'Failed to get nutritional information. Please try again.';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Search Error', errorMessage);
     } finally {
       setLoading(false);
     }

@@ -1,17 +1,28 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { useColorScheme as useNativeColorScheme } from 'react-native';
 
-const ColorSchemeContext = createContext({
+const ColorSchemeContext = createContext<{
+  colorScheme: 'light' | 'dark';
+  setColorScheme: (scheme: 'light' | 'dark') => void;
+  isHydrated: boolean;
+}>({
   colorScheme: 'light',
-  setColorScheme: (scheme: 'light' | 'dark') => {},
+  setColorScheme: () => {},
+  isHydrated: false,
 });
 
 export function ColorSchemeProvider({ children }: { children: React.ReactNode }) {
   const systemScheme = useNativeColorScheme();
   const [colorScheme, setColorScheme] = useState<'light' | 'dark'>(systemScheme ?? 'light');
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    setColorScheme(systemScheme ?? 'light');
+    setIsHydrated(true);
+  }, [systemScheme]);
 
   return (
-    <ColorSchemeContext.Provider value={{ colorScheme, setColorScheme }}>
+    <ColorSchemeContext.Provider value={{ colorScheme, setColorScheme, isHydrated }}>
       {children}
     </ColorSchemeContext.Provider>
   );
@@ -19,10 +30,8 @@ export function ColorSchemeProvider({ children }: { children: React.ReactNode })
 
 export function useColorScheme() {
   const ctx = useContext(ColorSchemeContext);
-  return ctx.colorScheme;
-}
-
-export function useSetColorScheme() {
-  const ctx = useContext(ColorSchemeContext);
-  return ctx.setColorScheme;
+  if (!ctx) {
+    throw new Error('useColorScheme must be used within a ColorSchemeProvider');
+  }
+  return ctx;
 } 

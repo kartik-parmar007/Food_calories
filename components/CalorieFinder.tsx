@@ -1,720 +1,316 @@
-import TextSearch from '@/components/TextSearch';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { CalorieResult, geminiService } from '@/services/geminiService';
-import { Ionicons } from '@expo/vector-icons';
-import { requestCameraPermissionsAsync } from 'expo-camera';
-import * as ImagePicker from 'expo-image-picker';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
-
-type ImagePickerResult = {
-  canceled: boolean;
-  assets: Array<{
-    uri: string;
-    base64?: string;
-    type?: string;
-    name?: string;
-  }>;
-};
-
-const analyzeImage = async (base64Image: string, setResult: (result: CalorieResult | null) => void, setSummary: (summary: string | null) => void, setLoading: (loading: boolean) => void) => {
-  try {
-    setLoading(true);
-    const result = await geminiService.analyzeFoodImage(base64Image);
-    setResult(result);
-    setSummary(result.summary);
-  } catch (error) {
-    console.error('Error analyzing image:', error);
-    Alert.alert('Error', 'Failed to analyze image. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
-
-const pickImage = async (setPermissionError: (error: string | null) => void, setImage: (image: string | null) => void, setResult: (result: CalorieResult | null) => void, setSummary: (summary: string | null) => void, setLoading: (loading: boolean) => void, galleryPermission: boolean | null) => {
-  setPermissionError(null);
-  try {
-    if (galleryPermission === false) {
-      setPermissionError('Permission to access gallery was denied. Please enable it in settings.');
-      setLoading(false);
-      return;
-    }
-
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      setPermissionError('Permission to access gallery was denied. Please enable it in settings.');
-      setLoading(false);
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-      base64: true,
-    });
-
-    if (!result.canceled && result.assets?.[0]) {
-      const asset = result.assets[0];
-      setImage(asset.uri);
-      setResult(null);
-      setSummary(null);
-      if (asset.base64) {
-        await analyzeImage(asset.base64, setResult, setSummary, setLoading);
-      } else {
-        Alert.alert('Error', 'Failed to get image data');
-      }
-    }
-  } catch (error) {
-    console.error('Error picking image:', error);
-    Alert.alert('Error', 'Failed to pick image');
-  } finally {
-    setPermissionError(null);
-  }
-};
-
-const takePhoto = async (setImage: (image: string | null) => void, setResult: (result: CalorieResult | null) => void, setLoading: (loading: boolean) => void) => {
-  try {
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-      base64: true,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setImage(result.assets[0].uri);
-      setResult(null);
-      if (result.assets[0].base64) {
-        await analyzeImage(result.assets[0].base64, setResult, setSummary, setLoading);
-      }
-    }
-  } catch (error) {
-    Alert.alert('Error', 'Failed to take photo');
-  }
-};
+import { Colors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { CalorieResult } from '@/services/geminiService';
+import React, { useState } from 'react';
+import {
+    Alert,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import ImageSearch from './ImageSearch';
+import ProductUrlSearch from './ProductUrlSearch';
+import TextSearch from './TextSearch';
+import { ThemedText } from './ThemedText';
+import { ThemedView } from './ThemedView';
 
 export default function CalorieFinder() {
-  const [image, setImage] = useState<string | null>(null);
   const [result, setResult] = useState<CalorieResult | null>(null);
-  const [summary, setSummary] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [permissionError, setPermissionError] = useState<string | null>(null);
-  const [cameraPermission, setCameraPermission] = useState<boolean | null>(null);
-  const [galleryPermission, setGalleryPermission] = useState<boolean | null>(null);
-  const [searchMode, setSearchMode] = useState<'image' | 'text'>('image');
+  const [activeTab, setActiveTab] = useState<'text' | 'image' | 'url'>('text');
+  
+  const { colorScheme, setColorScheme } = useColorScheme();
+  const safeScheme = colorScheme === 'dark' ? 'dark' : 'light';
+  const colors = Colors[safeScheme];
 
-  useEffect(() => {
-    (async () => {
-      const { status } = await requestCameraPermissionsAsync();
-      setCameraPermission(status === 'granted');
-
-      const galleryStatus = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      setGalleryPermission(galleryStatus.status === 'granted');
-
-      if (status !== 'granted' || galleryStatus.status !== 'granted') {
-        setPermissionError('Please grant both camera and gallery permissions to use this feature.');
-      }
-    })();
-  }, []);
-
-  const analyzeImage = async (base64Image: string) => {
-    try {
-      setLoading(true);
-      const result = await geminiService.analyzeFoodImage(base64Image);
-      setResult(result);
-      setSummary(`Confidence: ${Math.round(result.confidence * 100)}%`);
-    } catch (error) {
-      console.error('Error analyzing image:', error);
-      Alert.alert('Error', 'Failed to analyze image. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+  const handleResult = (calorieResult: CalorieResult) => {
+    setResult(calorieResult);
+    // Show success feedback with serving size
+    Alert.alert('Success!', `Found nutritional information for ${calorieResult.foodName} (per ${calorieResult.servingSize})`);
   };
 
-  const pickImage = async () => {
-    setPermissionError(null);
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        setPermissionError('Permission to access gallery was denied. Please enable it in settings.');
-        setLoading(false);
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-        base64: true,
-      });
-      if (!result.canceled && result.assets?.[0]) {
-        const asset = result.assets[0];
-        setImage(asset.uri);
-        setResult(null);
-        setSummary(null);
-        if (asset.base64) {
-          await analyzeImage(asset.base64);
-        } else {
-          Alert.alert('Error', 'Failed to get image data');
-        }
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
-    } finally {
-      setPermissionError(null);
-    }
-  };
-
-  const resetImage = () => {
-    setImage(null);
-    setResult(null);
-    setSummary(null);
-  };
-
-  const takePhoto = async () => {
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-        base64: true,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setImage(result.assets[0].uri);
-        setResult(null);
-        if (result.assets[0].base64) {
-          await analyzeImage(result.assets[0].base64);
-        }
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to take photo');
-    }
-  };
-
-  useEffect(() => {
-    (async () => {
-      const { status } = await requestCameraPermissionsAsync();
-      setCameraPermission(status === 'granted');
-
-      const galleryStatus = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      setGalleryPermission(galleryStatus.status === 'granted');
-
-      if (status !== 'granted' || galleryStatus.status !== 'granted') {
-        setPermissionError('Please grant both camera and gallery permissions to use this feature.');
-      }
-    })();
-  }, []);
-
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      padding: 16,
-    },
-    header: {
-      alignItems: 'center',
-      marginBottom: 20,
-    },
-    title: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      marginBottom: 8,
-    },
-    subtitle: {
-      textAlign: 'center',
-      fontSize: 16,
-      opacity: 0.8,
-    },
-    buttonContainer: {
-      flexDirection: 'column',
-      gap: 20,
-    },
-    button: {
-      padding: 20,
-      borderRadius: 12,
-      alignItems: 'center',
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
-    },
-    cameraButton: {
-      backgroundColor: '#007AFF',
-    },
-    galleryButton: {
-      backgroundColor: '#34C759',
-    },
-    buttonText: {
-      color: 'white',
-      fontSize: 18,
-      fontWeight: '600',
-    },
-    permissionText: {
-      textAlign: 'center',
-      color: '#FF3B30',
-      marginTop: 10,
-    },
-    imageContainer: {
-      alignItems: 'center',
-      marginBottom: 20,
-    },
-    image: {
-      width: '100%',
-      aspectRatio: 4/3,
-      borderRadius: 8,
-    },
-    loadingOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    loadingText: {
-      color: '#fff',
-      fontSize: 16,
-      marginTop: 16,
-    },
-    resultContainer: {
-      backgroundColor: '#fff',
-      borderRadius: 8,
-      padding: 16,
-      marginBottom: 16,
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-      shadowOpacity: 0.25,
-      shadowRadius: 3.84,
-      elevation: 5,
-    },
-    nutrientContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 8,
-    },
-    nutrientIcon: {
-      width: 24,
-      height: 24,
-      marginRight: 8,
-    },
-    nutrientLabel: {
-      fontSize: 16,
-      color: '#333',
-    },
-    nutrientValue: {
-      fontSize: 16,
-      fontWeight: 'bold',
-      color: '#007AFF',
-      marginLeft: 'auto',
-    },
-    divider: {
-      height: 1,
-      backgroundColor: '#eee',
-      marginVertical: 16,
-    },
-    summaryContainer: {
-      backgroundColor: '#fff',
-      borderRadius: 8,
-      padding: 16,
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-      shadowOpacity: 0.25,
-      shadowRadius: 3.84,
-      elevation: 5,
-    },
-    summaryTitle: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      marginBottom: 8,
-    },
-    summaryText: {
-      fontSize: 16,
-      color: '#666',
-      lineHeight: 24,
-    },
-  });
-
-  const renderSearchOptions = () => (
-    <ThemedView style={styles.searchOptionsContainer}>
-      <TouchableOpacity
-        style={[
-          styles.searchOption,
-          searchMode === 'image' && styles.searchOptionActive
-        ]}
-        onPress={() => setSearchMode('image')}
-      >
-        <ThemedText style={[
-          styles.searchOptionText,
-          searchMode === 'image' && styles.searchOptionTextActive
-        ]}>
-          📸 Image Search
-        </ThemedText>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[
-          styles.searchOption,
-          searchMode === 'text' && styles.searchOptionActive
-        ]}
-        onPress={() => setSearchMode('text')}
-      >
-        <ThemedText style={[
-          styles.searchOptionText,
-          searchMode === 'text' && styles.searchOptionTextActive
-        ]}>
-          🔍 Text Search
-        </ThemedText>
-      </TouchableOpacity>
-    </ThemedView>
-  );
-
-  const renderImageSearch = () => (
-    <ThemedView style={[styles.buttonContainer, { flexDirection: 'column', gap: 20 }]}>
-      <TouchableOpacity
-        style={[styles.button, styles.cameraButton]}
-        onPress={takePhoto}
-        disabled={cameraPermission === false}
-        accessibilityLabel="Take a photo of your food"
-      >
-        <Ionicons name="camera" size={24} color="#fff" style={{ marginRight: 10 }} />
-        <ThemedText style={styles.buttonText}>Take Photo</ThemedText>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.button, styles.galleryButton]}
-        onPress={pickImage}
-        accessibilityLabel="Upload an image from your gallery"
-      >
-        <Ionicons name="image" size={24} color="#fff" style={{ marginRight: 10 }} />
-        <ThemedText style={styles.buttonText}>Upload From Gallery</ThemedText>
-      </TouchableOpacity>
-
-      {cameraPermission === false && (
-        <ThemedText style={styles.permissionText}>
-          Camera permission is required to take photos
-        </ThemedText>
-      )}
-      {permissionError && (
-        <ThemedText style={styles.permissionText}>{permissionError}</ThemedText>
-      )}
-    </ThemedView>
-  );
-
-  const renderResultCard = () => (
-    <ThemedView style={styles.resultCard}>
-      <ThemedText type="subtitle" style={styles.foodName}>{result?.foodName}</ThemedText>
-      <ThemedText>Calories: {result?.calories}</ThemedText>
-      <ThemedText>Serving Size: {result?.servingSize}</ThemedText>
-      {/* Add more details as needed, e.g. nutrients, confidence, etc. */}
-      {summary && (
-        <ThemedView style={styles.summaryContainer}>
-          <ThemedText type="subtitle" style={styles.summaryTitle}>Summary</ThemedText>
-          <ThemedText style={styles.summaryText}>{summary}</ThemedText>
-        </ThemedView>
-      )}
-      <TouchableOpacity style={styles.tryAgainButton} onPress={resetImage}>
-        <Ionicons name="refresh" size={20} color="#fff" style={{ marginRight: 6 }} />
-        <ThemedText style={styles.tryAgainButtonText}>Try Again</ThemedText>
-      </TouchableOpacity>
-    </ThemedView>
-  );
-
-  const handleTextSearchResult = (searchResult: CalorieResult) => {
-    setResult(searchResult);
-    setImage(null);
-    setSummary(null);
+  const toggleColorScheme = () => {
+    setColorScheme(colorScheme === 'light' ? 'dark' : 'light');
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      <ThemedView style={styles.header}>
-        <ThemedText type="title" style={styles.title}>
-          Calories Finder
-        </ThemedText>
-        <ThemedText style={styles.subtitle}>
-          Find nutritional information by taking a photo or searching by name
-        </ThemedText>
-      </ThemedView>
-
-      {renderSearchOptions()}
-
-      {!image && !result && (
-        searchMode === 'image' ? renderImageSearch() : 
-        <TextSearch onResult={handleTextSearchResult} />
-      )}
-
-      {image && (
-        <ThemedView style={styles.imageContainer}>
-          <Image source={{ uri: image }} style={styles.foodImage} />
-          {loading && (
-            <ThemedView style={styles.loadingOverlay}>
-              <ActivityIndicator size="large" color="#007AFF" />
-              <ThemedText style={styles.loadingText}>Analyzing your food...</ThemedText>
-            </ThemedView>
-          )}
-          {!loading && result && renderResultCard()}
-          <TouchableOpacity style={styles.resetButton} onPress={resetImage}>
-            <ThemedText style={styles.resetButtonText}>Try Another Image</ThemedText>
-          </TouchableOpacity>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {/* Enhanced Header */}
+        <ThemedView style={[styles.header, { backgroundColor: colors.surface }]}>
+          <View style={styles.titleContainer}>
+            <ThemedText type="title" style={[styles.title, { color: colors.text }]}>
+              🍎 Food Calorie Finder
+            </ThemedText>
+            <Switch
+              value={colorScheme === 'dark'}
+              onValueChange={toggleColorScheme}
+              trackColor={{ false: '#767577', true: colors.primary }}
+              thumbColor={colorScheme === 'dark' ? colors.accent.mint : '#f4f3f4'}
+            />
+          </View>
+          <ThemedText type="default" style={[styles.subtitle, { color: colors.text }]}>
+            Get nutritional information for any food.
+          </ThemedText>
         </ThemedView>
-      )}
 
-      {result && !image && renderResultCard()}
-    </ScrollView>
+        {/* Search Content */}
+        <View style={styles.searchContent}>
+          {activeTab === 'text' && (
+            <TextSearch onResult={handleResult} />
+          )}
+          {activeTab === 'image' && (
+            <ImageSearch onResult={handleResult} />
+          )}
+          {activeTab === 'url' && (
+            <ProductUrlSearch onResult={handleResult} />
+          )}
+        </View>
+
+        {/* Results Section */}
+        {result && (
+          <ThemedView style={[styles.resultContainer, { backgroundColor: colors.surface }]}>
+            <ThemedText type="subtitle" style={[styles.resultTitle, { color: colors.text }]}>
+              📊 Nutritional Information
+            </ThemedText>
+            <ThemedText style={[styles.foodName, { color: colors.text }]}>{result.foodName}</ThemedText>
+            <ThemedText style={[styles.servingSize, { color: colors.text }]}>
+              Serving Size: {result.servingSize}
+            </ThemedText>
+            <ThemedText style={[styles.calories, { color: colors.error }]}>
+              Calories: {result.calories}
+            </ThemedText>
+            {result.nutrients && (
+              <View style={styles.nutrientsContainer}>
+                {result.nutrients.protein && (
+                  <ThemedText style={[styles.nutrient, { color: colors.text }]}>
+                    Protein: {result.nutrients.protein}
+                  </ThemedText>
+                )}
+                {result.nutrients.carbs && (
+                  <ThemedText style={[styles.nutrient, { color: colors.text }]}>
+                    Carbohydrates: {result.nutrients.carbs}
+                  </ThemedText>
+                )}
+                {result.nutrients.fat && (
+                  <ThemedText style={[styles.nutrient, { color: colors.text }]}>
+                    Fat: {result.nutrients.fat}
+                  </ThemedText>
+                )}
+                {result.nutrients.fiber && (
+                  <ThemedText style={[styles.nutrient, { color: colors.text }]}>
+                    Fiber: {result.nutrients.fiber}
+                  </ThemedText>
+                )}
+              </View>
+            )}
+            <ThemedText style={[styles.confidence, { color: colors.text }]}>
+              Confidence: {Math.round(result.confidence * 100)}%
+            </ThemedText>
+          </ThemedView>
+        )}
+      </ScrollView>
+
+      {/* Bottom Navigation */}
+      <ThemedView style={[styles.bottomNav, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+        <TouchableOpacity
+          style={[styles.navButton, activeTab === 'text' && { backgroundColor: colors.primary }]}
+          onPress={() => setActiveTab('text')}
+        >
+          <ThemedText style={[styles.navButtonText, { color: activeTab === 'text' ? 'white' : colors.text }]}>
+            🔍 Text
+          </ThemedText>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.navButton, activeTab === 'image' && { backgroundColor: colors.primary }]}
+          onPress={() => setActiveTab('image')}
+        >
+          <ThemedText style={[styles.navButtonText, { color: activeTab === 'image' ? 'white' : colors.text }]}>
+            📷 Image
+          </ThemedText>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.navButton, activeTab === 'url' && { backgroundColor: colors.primary }]}
+          onPress={() => setActiveTab('url')}
+        >
+          <ThemedText style={[styles.navButtonText, { color: activeTab === 'url' ? 'white' : colors.text }]}>
+            🔗 URL
+          </ThemedText>
+        </TouchableOpacity>
+      </ThemedView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 100, // Space for bottom nav
   },
   header: {
-    alignItems: 'center',
-    marginBottom: 30,
+    padding: 20,
+    marginBottom: 20,
+    borderRadius: 0,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+  titleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 10,
   },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
   subtitle: {
-    textAlign: 'center',
     fontSize: 16,
+    textAlign: 'center',
+  },
+  headerStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 10,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 15,
+    marginHorizontal: 5,
+    borderRadius: 12,
+    shadowColor: 'rgba(0,0,0,0.1)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statNumber: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
     opacity: 0.8,
   },
-  searchOptionsContainer: {
-    flexDirection: 'row',
-    marginBottom: 20,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    padding: 4,
-  },
-  searchOption: {
+  searchContent: {
     flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
+    paddingHorizontal: 20,
   },
-  searchOptionActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  searchOptionText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  searchOptionTextActive: {
-    fontWeight: '600',
-  },
-  buttonContainer: {
-    flexDirection: 'column',
-    gap: 20,
-  },
-  button: {
+  placeholderContainer: {
     padding: 20,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
+    marginBottom: 20,
+    shadowColor: 'rgba(0,0,0,0.1)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  placeholderTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 15,
+  },
+  placeholderText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 24,
+  },
+  placeholderButton: {
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 8,
+    shadowColor: 'rgba(0,0,0,0.1)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  placeholderButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  bottomNav: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    paddingBottom: 20,
+    paddingTop: 10,
+    shadowColor: 'rgba(0,0,0,0.1)',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  navButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginHorizontal: 5,
+  },
+  navButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  resultContainer: {
+    margin: 20,
+    padding: 20,
+    borderRadius: 12,
+    shadowColor: 'rgba(0,0,0,0.1)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
     shadowRadius: 4,
     elevation: 3,
   },
-  cameraButton: {
-    backgroundColor: '#007AFF',
-  },
-  galleryButton: {
-    backgroundColor: '#34C759',
-  },
-  buttonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  permissionText: {
-    textAlign: 'center',
-    color: '#FF3B30',
-    marginTop: 10,
-  },
-  imageContainer: {
-    alignItems: 'center',
-  },
-  foodImage: {
-    width: 300,
-    height: 225,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-  },
-  resultContainer: {
-    width: '100%',
-    padding: 20,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    marginBottom: 20,
-  },
-  foodName: {
+  resultTitle: {
     textAlign: 'center',
     marginBottom: 15,
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  foodName: {
     fontSize: 24,
-  },
-  calorieCard: {
-    alignItems: 'center',
-    padding: 20,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    marginBottom: 20,
-  },
-  calorieNumber: {
-    fontSize: 48,
     fontWeight: 'bold',
-    color: '#FF9500',
-  },
-  calorieLabel: {
-    fontSize: 18,
-    marginTop: 5,
+    textAlign: 'center',
+    marginBottom: 10,
   },
   servingSize: {
-    fontSize: 14,
-    opacity: 0.7,
-    marginTop: 5,
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  calories: {
+    fontSize: 20,
+    textAlign: 'center',
+    marginBottom: 15,
+    fontWeight: '600',
   },
   nutrientsContainer: {
     marginBottom: 15,
   },
-  nutrientsTitle: {
-    marginBottom: 10,
-    fontSize: 18,
-  },
-  nutrientRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-    gap: 6,
-  },
-  nutrientLabel: {
+  nutrient: {
     fontSize: 16,
+    marginBottom: 5,
   },
-  nutrientValue: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  confidenceText: {
-    textAlign: 'center',
+  confidence: {
     fontSize: 14,
-    opacity: 0.7,
-  },
-  resetButton: {
-    backgroundColor: '#FF3B30',
-    padding: 15,
-    borderRadius: 8,
-    marginTop: 10,
-  },
-  resetButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
     textAlign: 'center',
+    fontStyle: 'italic',
   },
-  resultCard: {
-    width: '100%',
-    padding: 24,
-    borderRadius: 18,
-    marginBottom: 20,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  calorieBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-    gap: 16,
-  },
-  calorieBadge: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#FF9500',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-    shadowColor: '#FF9500',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  calorieBadgeNumber: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginTop: 2,
-  },
-  calorieBadgeLabel: {
-    color: '#FF9500',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  calorieBadgeTextCol: {
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    gap: 2,
-  },
-  tryAgainButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#007AFF',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    marginTop: 18,
-    alignSelf: 'center',
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.18,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  tryAgainButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-    borderRadius: 12,
-  },
-}); 
+});
